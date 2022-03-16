@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script type="text/javascript" src="/siofu/client.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="text/javascript" src="https://dev.knowledgetalk.co.kr:7102/knowledgetalk.min.js"></script>
+    <title>Document</title>
+    <style>
+         #roomIdInput {
+      padding: 10px; width: 200px; margin: 5px;
+      border: 2px darkslategray solid;
+      border-radius: 10px;
+    }
+
+    #videoBox{margin: 50px; display:inline-grid;grid-template-columns:repeat(auto-fill,minmax(100%,auto))}
+    #videoBox video { width: 100%; }
+
+        #container {  
+            width: 400px;
+            height: 600px;   
+        }
+        #content {
+          border-radius: 10px;
+            margin-right: 50px;
+            width: 400px;
+            height: 500px;
+            border: 1px solid skyblue;
+            background: skyblue;
+          display: inline-block;
+            overflow-y: scroll;
+         
+           
+        }
+        #chatForm {
+            height: 10%;
+            border-top: 3px solid skyblue;
+            text-align: center;
+        }
+        #message {
+            width: 80%;
+            height: 34px;
+            border-radius: 10px;
+        }
+        #button {
+           
+            width: 18%;
+            height: 34px;
+            border-radius: 10px;
+            background: yellow;
+            color: black;
+        }
+
+        
+    .msgLine {
+        margin: 15px;
+    }
+    .msgBox {
+        white-space: normal;
+        display: inline-block;
+        border: 1px solid yellow;
+        background: yellow;
+        padding: 2px 5px;
+        border-radius: 10px;
+    }
+
+    .whiteboard {
+      cursor: crosshair;
+      border-radius: 10px;
+            width: 500px;
+            height: 500px;
+            border: 3px solid gray;
+            
+  }
+  
+  .colors {
+   margin-left: 40px; position: fixed;
+  }
+  
+  .color {
+    display: inline-block;
+    height: 30px;
+    width: 30px;
+  }
+  
+  .color.black { background-color: black; }
+  .color.red { background-color: red; }
+  .color.green { background-color: green; }
+  .color.blue { background-color: blue; }
+  .color.yellow { background-color: yellow; }
+</style>
+    </style>
+</head>
+<body>
+
+    <div>
+        <input type="text" name="roomIdInput" id="roomIdInput" placeholder="방 번호" />
+        <button class="btn btn-sm btn-warning" id="createVideoRoomBtn" disabled>방 생성</button>
+        <button class="btn btn-sm btn-warning" id="joinRoomBtn" disabled>방에 들어가기</button>
+        <button class="btn btn-sm btn-warning" onclick="show()" id="publishBtn" disabled>시작</button>
+      </div>
+      <div class="row">
+        
+      <div id="videoBox">
+      </div>
+      
+    <div id="container">
+         <div id="content"></div> 
+  <!-- 메세지 입력 -->
+          <input id="message" />
+          <button  id='button'>전송</button>
+         
+    </div>
+
+  <div class="col">
+<canvas   id="canvas2" class="whiteboard " ></canvas>
+<div class="colors" id="color2">
+  <button class="color black"></button>
+  <button class="color red"></button>
+  <button class="color green"></button>
+  <button class="color blue"></button>
+  <button class="color yellow"></button>
+</div>
+</div>
+</div>
+
+    <div id="printBox">
+    </div>
+
+
+  
+
+   
+    <script>
+const createVideoRoomBtn = document.getElementById('createVideoRoomBtn');
+  const joinRoomBtn = document.getElementById('joinRoomBtn');
+  const roomIdInput = document.getElementById('roomIdInput');
+  const publishBtn = document.getElementById('publishBtn');
+  const videoBox = document.getElementById('videoBox');
+  const printBox = document.getElementById("printBox");
+  const container = document.getElementById("container");
+  const canvas2 = document.getElementById("canvas2");
+  const color2 = document.getElementById("color2");
+  
+
+ 
+  container.style.display = "none";
+  canvas2.style.display = "none";
+  color2.style.display = "none";
+
+  function show() {
+    canvas2.style.display = "";
+container.style.display = "";
+color2.style.display = "";
+
+  }
+
+
+
+  //멤버
+  let members = {};
+
+  //객체 생성
+  var knowledgetalk = new Knowledgetalk();
+
+  let cpCode = "KP-20200101-01";
+  let authKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoi64Kg66as7KeA7Y-s7J247Yq4IiwibWF4VXNlciI6IjUwMDAwMDAwIiwic3RhcnREYXRlIjoiMjAyMC0wMS0wMVQwNjo0NzowMC4wMDBaIiwiZW5kRGF0ZSI6IjIwMzAtMTItMzFUMDY6NDc6MDAuMDAwWiIsImF1dGhDb2RlIjoiS1AtMjAyMDAxMDEtMDEiLCJjb21wYW55Q29kZSI6IkxJQy0wMSIsImlhdCI6MTU4NzUzODExNH0.73A0UiiMHJeIS8pIgoN4DfEWT4QCsMnXkO4uUdnfbYI";
+
+  //해당 url 로 init
+  knowledgetalk.init(cpCode, authKey).then(result => {
+    if(result.code !== '200') {
+      alert('init failed!');
+      return;
+    }
+
+    createVideoRoomBtn.disabled = false;
+    joinRoomBtn.disabled = false;
+  })
+
+  /******************** 버튼 이벤트 ********************/
+
+  createVideoRoomBtn.addEventListener('click', async () => {
+    //미디어서버용 방 만들기
+    let roomData = await knowledgetalk.createVideoRoom();
+    if(roomData.code !== '200'){
+      alert('createRoom failed!');
+      return;
+    }
+    roomIdInput.value = roomData.roomId;
+    createVideoRoomBtn.disabled = true;
+  })
+
+  joinRoomBtn.addEventListener('click', async () => {
+    let roomId = roomIdInput.value;
+
+    //방 입장
+    let roomData = await knowledgetalk.joinRoom(roomId);
+
+    if(roomData.code !== '200'){
+      alert('joinRoom failed!');
+      return;
+    }
+
+    members = roomData.members;
+    for(const member in members){
+      if(member === knowledgetalk.getUserId()) continue;
+      createVideoBox(member);
+    }
+      
+    createVideoRoomBtn.disabled = true;
+    joinRoomBtn.disabled = true;
+
+    publishBtn.disabled = false;
+  })
+
+  publishBtn.addEventListener('click', async () => {
+    let localStream = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 380}, audio: false});
+    createVideoBox(knowledgetalk.getUserId());
+    document.getElementById('multiVideo-' + knowledgetalk.getUserId()).srcObject = localStream;
+
+    //미디어 서버에 영상 송신
+    let result = await knowledgetalk.publishVideo('cam', localStream);
+    if(!result) {
+      alert('publish video failed!');
+    }
+
+
+
+
+
+    var room = knowledgetalk.getRoomId();
+  console.log(room);
+  var socket = io.connect();
+  // 소켓 이벤트를 연결합니다.
+  socket.emit('join', room);
+
+  socket.on('message', function (data) {
+    // $('<p>' + data.message + '</p>').appendTo('body');
+    var output = '';
+    output += '    <h5>' + data.name + '</h5>';
+    output += '    <div class="msgBox">' + data.message + '</div>';
+    /* output += '    <p>' + data.date + '</p>'; */
+
+    // 객체 추가
+    $(output).appendTo('#content');
+    /* $('#content').listview('refresh'); */
+  });
+  
+
+  $('#button').click(function () {
+
+    if($('#message').val()=='') {
+      return;
+    } else {
+    socket.emit('message', {
+      name: knowledgetalk.getUserId(),
+      message: $('#message').val(),
+      date: new Date().toUTCString()
+    });
+
+    $('#message').val('');
+
+    let content = document.querySelector('#content');
+    content.scrollTop =  content.scrollHeight;
+  }
+    
+    
+  });
+  
+
+
+  })
+
+  knowledgetalk.addEventListener('presence', async event => {
+    let msg = event.detail;
+    socketLog('receive', msg);
+    let type = msg.type;
+
+    switch (type){
+            //다른 user 의 입장 알림
+      case 'join':
+        createVideoBox(msg.user.id);
+        break;
+
+            //다른 user 의 퇴장 알림
+      case 'leave':
+        removeVideoBox(msg.user);
+        break;
+
+            //미디어서버로부터 다른 user 의 영상 수신이 가능 한 상태
+      case 'publish':
+        for(const feed of msg.feeds){
+          //영상 수신 요청
+          let stream = await knowledgetalk.subscribeVideo(feed.id, feed.type)
+          document.getElementById('multiVideo-' + feed.id).srcObject = stream;
+        }
+        break;
+    }
+  })
+
+  //video box 생성
+  const createVideoBox = id => {
+    let videoContainer = document.createElement('div');
+    videoContainer.classList = 'multiVideo';
+    videoContainer.id = id;
+
+    let videoLabel = document.createElement("p");
+    let videoLabelText = document.createTextNode(id);
+    videoLabel.appendChild(videoLabelText);
+
+    videoContainer.appendChild(videoLabel);
+
+    let multiVideo = document.createElement('video');
+    multiVideo.autoplay = true;
+    multiVideo.playsInline = true;
+    multiVideo.id = 'multiVideo-' + id;
+    videoContainer.appendChild(multiVideo);
+
+    videoBox.appendChild(videoContainer);
+  }
+
+  //video box 제거
+  const removeVideoBox = id => {
+    let child = document.getElementById(id);
+    videoBox.removeChild(child);
+  }
+
+  //로그 출력
+  const socketLog = (type, contents) => {
+    console.debug(type, contents)
+    let objContents = JSON.parse(JSON.stringify(contents));
+    let printContents = JSON.stringify(objContents);
+    const textLine = document.createElement("p");
+    const textContents = document.createTextNode(`[${type}] ${printContents}`);
+    textLine.appendChild(textContents);
+    printBox.appendChild(textLine);
+  }
+
+
+    
+        
+
+(function() {
+
+  var socket = io();
+  var canvas = document.getElementsByClassName('whiteboard')[0];
+  var colors = document.getElementsByClassName('color');
+  var context = canvas.getContext('2d');
+
+  
+
+  
+
+
+
+  var current = {
+    color: 'black'
+  };
+  var drawing = false;
+
+  canvas.addEventListener('mousedown', onMouseDown, false);
+  canvas.addEventListener('mouseup', onMouseUp, false);
+  canvas.addEventListener('mouseout', onMouseUp, false);
+  canvas.addEventListener('mousemove', onMouseMove, false);
+  
+  
+
+  for (var i = 0; i < colors.length; i++){
+    colors[i].addEventListener('click', onColorUpdate, false);
+  }
+
+  socket.on('drawing', onDrawingEvent);
+
+  function drawLine(x0, y0, x1, y1, color, emit){
+    context.beginPath();
+    context.moveTo(x0, y0);
+    context.lineTo(x1, y1);
+    context.strokeStyle = color;
+    context.lineWidth = 2;
+    context.stroke();
+    context.closePath();
+
+    if (!emit) { return; }
+    
+
+    socket.emit('drawing', {
+      x0: x0,
+      y0: y0,
+      x1: x1,
+      y1: y1,
+      color: color
+    });
+  }
+
+  function onMouseDown(e){
+    drawing = true;
+    current.x = e.offsetX;
+    current.y = e.offsetY;
+  }
+
+  function onMouseUp(e){
+    if (!drawing) { return; }
+    drawing = false;
+    drawLine(current.x, current.y, e.offsetX, e.offsetY, current.color, true);
+  }
+
+  function onMouseMove(e){
+    if (!drawing) { return; }
+    drawLine(current.x, current.y, e.offsetX, e.offsetY, current.color, true);
+    current.x = e.offsetX;
+    current.y = e.offsetY;
+  }
+
+  function onColorUpdate(e){
+    current.color = e.target.className.split(' ')[1];
+  }
+
+  
+
+  function onDrawingEvent(data){
+    
+    drawLine(data.x0, data.y0, data.x1, data.y1, data.color);
+  }
+ 
+
+
+  window.addEventListener('resize', onResize, false);
+  onResize();
+ 
+  function onResize() {
+    canvas.width = 500;
+    canvas.height =500;
+    
+  }
+})();
+
+    
+
+
+
+</script>
+
+</body>
+</html>
